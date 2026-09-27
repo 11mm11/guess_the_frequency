@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>주파수 맞추기</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: sans-serif; background-color: #f2f2f2; }
+    .container { width: 800px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); }
+    h1 { text-align: center; margin-bottom: 20px; color: #333; }
+    .control-group { margin-bottom: 15px; display: flex; align-items: center; }
+    .control-group label { width: 100px; font-weight: bold; }
+    .button { padding: 10px 20px; background-color: #4CAF50; color: white; border: none; cursor: pointer; margin-right: 10px; font-size: 16px; border-radius: 4px; }
+    .button:hover { background-color: #45a049; }
+    .toggle-button { width: 60px; }
+    .slider-container { flex-grow: 1; margin-right: 10px; }
+    .slider { width: 100%; }
+    .frequency-input { width: 80px; }
+    #result-table { margin-top: 20px; border-collapse: collapse; width: 100%; }
+    #result-table th, #result-table td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+    #result-table th { background-color: #f0f0f0; }
+    #attempt-count { margin-top: 10px; margin-bottom: 10px; font-size: 18px; }
+    #show-table-button { margin-top: 10px; }
+    #best-score { margin-top: 10px; font-size: 18px; color: #d50000; }
+    #results-table td {text-align: left;}
+
+    /* 태블릿 */
+     @media (max-width: 850px) {
+       .container {
+         width: 95%;
+       }
+       #result-table th, #result-table td, #results-table th, #results-table td{
+         font-size: 14px;
+         padding: 6px;
+       }
+     }
+    
+     /* 모바일 */
+     @media (max-width: 500px) {
+       .container {
+         width: 100%;
+       }
+    
+       .control-group {
+         flex-direction: column; /* 컨트롤들을 세로로 배열 */
+         align-items: flex-start; /* 왼쪽 정렬 */
+       }
+    
+       .control-group label {
+         width: auto; /* 라벨 너비 자동 조정 */
+         margin-bottom: 5px; /* 라벨 아래 여백 추가 */
+       }
+    
+       .slider-container {
+         width: 100%; /* 슬라이더 컨테이너 너비 100% */
+         margin-right: 0; /* 오른쪽 여백 제거 */
+         margin-bottom: 10px; /* 아래쪽 여백 추가 */
+       }
+    
+       .frequency-input {
+         width: 100%; /* 입력 필드 너비 100% */
+         margin-bottom: 10px; /* 아래쪽 여백 추가 */
+       }
+    
+       .button {
+         margin-bottom: 10px;
+       }
+    
+       #result-table th, #result-table td, #results-table th, #results-table td {
+         font-size: 12px;
+         padding: 4px;
+       }
+       #result-table th:nth-child(1), #result-table td:nth-child(1),
+       #results-table th:nth-child(1), #results-table td:nth-child(1){
+         display: none;
+       }
+     }
+    
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/11.1.0/firebase-database-compat.js"></script>
+  <script>
+    // Your web app's Firebase configuration
+   const firebaseConfig = {
+     apiKey: "AIzaSyDWSQIrH2AV0_nnoU62bwxQPXTxGzj38ZQ",
+     authDomain: "guessing-frequency.firebaseapp.com",
+     projectId: "guessing-frequency",
+     storageBucket: "guessing-frequency.firebasestorage.app",
+     messagingSenderId: "484332200696",
+     appId: "1:484332200696:web:dd67c347cdff1db5f1110d",
+     measurementId: "G-YJ9PN730RH"
+    };
+    
+  </script>
+</head>
+<body>
+  <div class="container">
+    <h1>주파수 맞추기</h1>
+
+    <div class="control-group">
+      <button id="new-reference" class="button">새 기준음</button>
+      <button id="reference-toggle" class="button toggle-button">▶</button>
+      <label for="reference-toggle">기준음</label>
+    </div>
+
+    <div class="control-group">
+      <button id="adjustable-toggle" class="button toggle-button">▶</button>
+      <label for="adjustable-toggle">조정음</label>
+    </div>
+
+    <div class="control-group">
+      <label for="frequency-slider">조정음 주파수:</label>
+      <div class="slider-container">
+        <input type="range" id="frequency-slider" class="slider" min="50" max="4500" value="440">
+      </div>
+      <input type="number" id="frequency-input" value="440">
+      <button id="check-match" class="button">일치 확인</button>
+    </div>
+
+    <div class="control-group">
+      <label for="volume-slider">볼륨:</label>
+      <input type="range" id="volume-slider" class="slider" min="0" max="1" step="0.01" value="0.3">
+    </div>
+
+    <div id="attempt-count">시도 횟수: 0</div>
+    <div id="best-score">최고 점수: -</div>
+
+
+    <button id="show-table-button" class="button">결과 표 보기</button>
+    <table id="result-table" hidden>
+      <thead>
+        <tr>
+          <th>시도 횟수</th>
+          <th>기준음 파형</th>
+          <th>기준음 주파수 (Hz)</th>
+          <th>조정음 파형</th>
+          <th>조정음 주파수 (Hz)</th>
+          <th>오차 범위 (Hz)</th>
+          <th>점수</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+    </div>
+  
+    <div id="share-result">
+      <h3>결과 공유</h3>
+      <label for="nickname">닉네임:</label>
+      <input type="text" id="nickname" placeholder="닉네임 입력">
+      <button id="share-button">결과 공유하기</button>
+    </div>
+  
+    <div id="results">
+      <h3>결과 목록</h3>
+      <table id="results-table">
+        <thead>
+          <tr>
+            <th>순위</th>
+            <th>닉네임</th>
+            <th>기준음 파형</th>
+            <th>기준음 주파수 (Hz)</th>
+            <th>조정음 파형</th>
+            <th>조정음 주파수 (Hz)</th>
+            <th>오차 범위 (Hz)</th>
+            <th>시도 횟수</th>
+            <th>점수</th>
+          </tr>
+        </thead>
+        <tbody>
+        </tbody>
+      </table>
+    </div>
+
+
+  
+  <script>
+    // Firebase SDK 로드
+    const app = firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
+    // Firebase Realtime Database 참조 (데이터베이스 경로 설정 추가)
+    const databaseRef = firebase.database().ref('results');
+    const researchDataRef = firebase.database().ref('research_data'); // 연구 데이터 저장 경로
+
+    // AudioContext 생성
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // 기준음 및 조정음 관련 변수
+    let referenceOscillator;
+    let adjustableOscillator;
+    let referenceWaveform = 'sine'; // 기본값
+    let referenceFrequency = 440; //기준 주파수
+    let adjustableWaveform = 'sine'; //조정음 파형 기본값
+    let adjustableFrequency = 440; //조정음 주파수
+    let isReferencePlaying = false; // 기준음 재생 상태
+    let isAdjustablePlaying = false; // 조정음 재생 상태
+
+    // 볼륨 조절을 위한 GainNode 생성
+    const gainNode = audioCtx.createGain();
+    gainNode.connect(audioCtx.destination);
+    gainNode.gain.value = 0.3; // 초기 볼륨 설정 (20% 감소)
+
+    // UI 요소
+    const newReferenceButton = document.getElementById('new-reference');
+    const referenceToggleButton = document.getElementById('reference-toggle');
+    const adjustableToggleButton = document.getElementById('adjustable-toggle');
+    const frequencySlider = document.getElementById('frequency-slider');
+    const frequencyInput = document.getElementById('frequency-input');
+    const checkMatchButton = document.getElementById('check-match');
+    const resultDiv = document.getElementById('result');
+    const volumeSlider = document.getElementById('volume-slider'); // 볼륨 슬라이더
+    const resultTable = document.getElementById('result-table'); // 결과 테이블
+    const showTableButton = document.getElementById('show-table-button'); // 표 보이기/숨기기 버튼
+    const attemptCountDisplay = document.getElementById('attempt-count'); // 시도 횟수 표시 요소
+    const bestScoreDisplay = document.getElementById('best-score'); // 최고 점수 표시 요소
+    const shareButton = document.getElementById('share-button'); //결과 공유 버튼
+    const nicknameInput = document.getElementById('nickname'); //닉네임 입력 창
+    const resultsTableBody = document.getElementById('results-table').querySelector('tbody'); //결과 테이블
+
+    // 시도 횟수 기록을 위한 변수
+    let attemptCount = 0;
+
+    // 최고 점수 변수
+    let bestScore = 0;
+
+    // 파형 종류
+    const waveforms = ['sine', 'square', 'sawtooth', 'triangle'];
+
+    // 정규 분포 난수 생성 함수 (로그 스케일 기준)
+    function generateNormalRandomLogScale(mean, stdDev) {
+      let u = 0, v = 0;
+      while (u === 0) u = Math.random(); // 0을 피하기 위해
+      while (v === 0) v = Math.random(); // 0을 피하기 위해
+      let num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+      num = Math.exp(num * stdDev + mean); // 로그 스케일로 변환
+      /*
+      if (num < 50) {
+        num = generateNormalRandomLogScale(mean, stdDev);
+      } else if (referenceFrequency > 4500) {
+        num = generateNormalRandomLogScale(mean, stdDev);
+      }
+      */
+      return num;
+    }
+
+    // 선형 스케일의 슬라이더 값을 로그 스케일로 변환하는 함수
+    function linearToLogScale(linearValue, minLinear, maxLinear, minLog, maxLog) {
+      const logRange = Math.log(maxLog) - Math.log(minLog);
+      const linearRange = maxLinear - minLinear;
+      const logScaleValue = Math.exp(Math.log(minLog) + logRange * (linearValue - minLinear) / linearRange);
+      return logScaleValue;
+    }
+
+    // 로그 스케일의 슬라이더 값을 선형 스케일로 변환하는 함수
+    function logToLinearScale(logValue, minLinear, maxLinear, minLog, maxLog) {
+      const logRange = Math.log(maxLog) - Math.log(minLog);
+      const linearRange = maxLinear - minLinear;
+      const linearScaleValue = minLinear + linearRange * (Math.log(logValue) - Math.log(minLog)) / logRange;
+      return linearScaleValue;
+    }
+
+    // 새 기준음 생성 함수 (기준음 + 조정음 파형 랜덤 설정)
+    function generateNewReference() {
+      // 기준음 파형 랜덤 선택
+      referenceWaveform = waveforms[Math.floor(Math.random() * waveforms.length)];
+
+      // 조정음 파형을 기준음과 다르게 선택
+      const availableWaveforms = waveforms.filter(waveform => waveform !== referenceWaveform);
+      adjustableWaveform = availableWaveforms[Math.floor(Math.random() * availableWaveforms.length)];
+
+      // 로그 스케일 기준으로 정규 분포를 따르는 주파수 선택
+      let desiredMeanFrequency = 880; // 원하는 평균 주파수를 선형 스케일로 설정 (예: 880Hz)
+      let meanFrequencyLog = Math.log(desiredMeanFrequency); // 평균 주파수의 로그값
+      let stdDevFrequencyLog = Math.log(3520 / 110) / 3; // 표준 편차 조정 (80%의 데이터가 더 좁은 범위에 분포하도록)
+      referenceFrequency = generateNormalRandomLogScale(meanFrequencyLog, stdDevFrequencyLog);
+
+      // 주파수 범위 제한
+      while (referenceFrequency < 50 || referenceFrequency > 4500) {
+        referenceFrequency = generateNormalRandomLogScale(meanFrequencyLog, stdDevFrequencyLog);
+      }
+      /*
+      if (referenceFrequency < 50) {
+        referenceFrequency = 50;
+      } else if (referenceFrequency > 4500) {
+        referenceFrequency = 4500;
+      }
+      */
+      
+
+      // 조정음 주파수 초기화 (440Hz)
+      adjustableFrequency = 440;
+
+      // 조정음 슬라이더 설정
+      frequencySlider.value = logToLinearScale(adjustableFrequency, parseFloat(frequencySlider.min), parseFloat(frequencySlider.max), 50, 4500);
+      frequencyInput.value = adjustableFrequency.toFixed(2);
+    }
+
+    // 기준음 재생/정지 함수
+    function toggleReference() {
+      if (isReferencePlaying) {
+        stopReference();
+      } else {
+        // 조정음이 재생 중이면 기준음을 재생하지 않음
+        if (!isAdjustablePlaying) {
+          playReference();
+        }
+      }
+    }
+
+    // 조정음 재생/정지 함수
+    function toggleAdjustable() {
+      if (isAdjustablePlaying) {
+        stopAdjustable();
+      } else {
+        // 기준음이 재생 중이면 조정음을 재생하지 않음
+        if (!isReferencePlaying) { 
+          playAdjustable();
+        }
+      }
+    }
+
+    // 기준음 재생 함수
+    function playReference() {
+      if (referenceOscillator) {
+        stopReference();
+      }
+      referenceOscillator = audioCtx.createOscillator();
+      referenceOscillator.type = referenceWaveform;
+      referenceOscillator.frequency.value = referenceFrequency;
+      referenceOscillator.connect(gainNode);
+      referenceOscillator.start();
+      isReferencePlaying = true; // 기준음 재생 상태를 true로 설정
+      referenceToggleButton.textContent = '■'; // 정지 버튼으로 변경
+    }
+
+    // 기준음 정지 함수
+    function stopReference() {
+      if (referenceOscillator) {
+        referenceOscillator.stop();
+        referenceOscillator.disconnect();
+        referenceOscillator = null;
+      }
+      isReferencePlaying = false; // 기준음 재생 상태를 false로 설정
+      referenceToggleButton.textContent = '▶'; // 재생 버튼으로 변경
+    }
+
+    // 조정음 재생 함수 (파형 고정)
+    function playAdjustable() {
+      if (adjustableOscillator) {
+        stopAdjustable();
+      }
+      adjustableOscillator = audioCtx.createOscillator();
+      adjustableOscillator.type = adjustableWaveform;
+      adjustableOscillator.frequency.value = adjustableFrequency;
+      adjustableOscillator.connect(gainNode);
+      adjustableOscillator.start();
+      isAdjustablePlaying = true;
+      adjustableToggleButton.textContent = '■'; // 정지 버튼으로 변경
+    }
+
+    // 조정음 정지 함수
+    function stopAdjustable() {
+      if (adjustableOscillator) {
+        adjustableOscillator.stop();
+        adjustableOscillator = null;
+      }
+      isAdjustablePlaying = false;
+      adjustableToggleButton.textContent = '▶'; // 재생 버튼으로 변경
+    }
+
+    // 주파수 슬라이더/입력 이벤트 처리 (로그 스케일 적용)
+    frequencySlider.addEventListener('input', () => {
+      adjustableFrequency = linearToLogScale(parseFloat(frequencySlider.value), parseFloat(frequencySlider.min), parseFloat(frequencySlider.max), 50, 4500);
+      frequencyInput.value = adjustableFrequency.toFixed(2);
+      if (adjustableOscillator) {
+        adjustableOscillator.frequency.value = adjustableFrequency;
+      }
+    });
+
+    frequencyInput.addEventListener('input', () => {
+      adjustableFrequency = parseFloat(frequencyInput.value);
+      frequencySlider.value = logToLinearScale(adjustableFrequency, parseFloat(frequencySlider.min), parseFloat(frequencySlider.max), 50, 4500);
+      if (adjustableOscillator) {
+        adjustableOscillator.frequency.value = adjustableFrequency;
+      }
+    });
+
+    // 볼륨 슬라이더 이벤트 처리
+    volumeSlider.addEventListener('input', () => {
+      gainNode.gain.value = parseFloat(volumeSlider.value);
+    });
+
+    // 일치 확인 버튼 이벤트 처리
+    checkMatchButton.addEventListener('click', () => {
+      const difference = Math.abs(referenceFrequency - adjustableFrequency);
+      const differencePercentage = (difference / referenceFrequency) * 100;
+      const logDifference = Math.abs(Math.log2(referenceFrequency) - Math.log2(adjustableFrequency));
+
+      // 점수 계산 (오차가 적을수록 높은 점수)
+      const score = calculateScore(referenceFrequency, adjustableFrequency);
+
+      // 최고 점수 업데이트
+      if (score > bestScore) {
+        bestScore = score;
+        bestScoreDisplay.textContent = `최고 점수: ${bestScore.toFixed(2)}`;
+      }
+
+      if (attemptCount <= 2) {
+        /*
+        const researchData = {
+          referenceWaveform: referenceWaveform,
+          referenceFrequency: referenceFrequency.toFixed(2),
+          adjustableWaveform: adjustableWaveform,
+          adjustableFrequency: adjustableFrequency.toFixed(2),
+          difference: Math.abs(referenceFrequency - adjustableFrequency).toFixed(2),
+          timestamp: Date.now() 
+        };*/
+        const researchData = {
+            referenceWaveform: referenceWaveform,
+            referenceFrequency: referenceFrequency.toFixed(2),
+            adjustableWaveform: adjustableWaveform,
+            adjustableFrequency: adjustableFrequency.toFixed(2),
+            difference: difference.toFixed(2),
+            logDifference: logDifference.toFixed(4), // 로그 스케일 오차 추가
+            timestamp: Date.now()
+        };
+    
+        researchDataRef.push(researchData)
+          .then(() => {
+            console.log('데이터가 저장되었습니다.');
+          })
+          .catch((error) => {
+            console.error('데이터 저장 오류:', error);
+          });
+      }
+
+      // 시도 횟수 증가 및 기록
+      attemptCount++;
+      const newRow = resultTable.insertRow();
+      const attemptCell = newRow.insertCell();
+      const refWaveformCell = newRow.insertCell();
+      const refFreqCell = newRow.insertCell();
+      const adjWaveformCell = newRow.insertCell();
+      const adjFreqCell = newRow.insertCell();
+      const diffCell = newRow.insertCell();
+      const scoreCell = newRow.insertCell(); // 점수 셀 추가
+      
+      attemptCell.textContent = attemptCount;
+      refWaveformCell.textContent = referenceWaveform;
+      refFreqCell.textContent = referenceFrequency.toFixed(2);
+      adjWaveformCell.textContent = adjustableWaveform;
+      adjFreqCell.textContent = adjustableFrequency.toFixed(2);
+      //diffCell.textContent = '<span class="math-inline">\{difference\.toFixed\(2\)\} Hz \(</span><span class="math-inline">\{differencePercentage\.toFixed\(2)\}\%)</span>';
+      diffCell.innerHTML = `<span class="math-inline">${difference.toFixed(2)} Hz</span> (<span class="math-inline">${differencePercentage.toFixed(2)}%</span>)`;
+      scoreCell.textContent = score.toFixed(2); // 점수 표시
+      //diffCell.innerHTML = `<span class="math-inline">${logDifference.toFixed(4)} (log2)</span>`;
+
+
+      // 시도 횟수 표시 업데이트
+      attemptCountDisplay.textContent = `시도 횟수: ${attemptCount}`;
+    });
+
+    // 결과 공유 버튼 이벤트 처리
+    shareButton.addEventListener('click', () => {
+      const nickname = nicknameInput.value;
+      if (nickname.trim() === '') {
+        alert('닉네임을 입력해주세요.');
+        return;
+      }
+
+      const resultData = {
+        nickname: nickname,
+        referenceWaveform: referenceWaveform,
+        referenceFrequency: referenceFrequency.toFixed(2),
+        adjustableWaveform: adjustableWaveform,
+        adjustableFrequency: adjustableFrequency.toFixed(2),
+        difference: Math.abs(referenceFrequency - adjustableFrequency).toFixed(2),
+        attemptCount: attemptCount,
+        score: calculateScore(Math.abs(referenceFrequency - adjustableFrequency), referenceFrequency).toFixed(2),
+        timestamp: Date.now() // 타임스탬프 추가
+      };
+
+      // Firebase Realtime Database에 결과 저장
+      databaseRef.push(resultData)
+        .then(() => {
+          alert('결과가 공유되었습니다.');
+          nicknameInput.value = ''; // 닉네임 입력 필드 초기화
+          updateResultsTable();
+        })
+        .catch((error) => {
+          console.error('결과 저장 오류:', error);
+          alert('결과 저장 중 오류가 발생했습니다.');
+        });
+    });
+
+    // Firebase Realtime Database에서 결과 가져와서 테이블에 표시
+    databaseRef.orderByChild('timestamp').limitToLast(25).on('value', (snapshot) => { // 최신 25개만 가져오기, 타임스탬프 내림차순 정렬
+      resultsTableBody.innerHTML = ''; // 테이블 내용 초기화
+
+      snapshot.forEach((childSnapshot) => {
+        const result = childSnapshot.val();
+        const newRow = resultsTableBody.insertRow();
+        newRow.insertCell().textContent = result.nickname;
+        newRow.insertCell().textContent = result.referenceWaveform;
+        newRow.insertCell().textContent = result.referenceFrequency;
+        newRow.insertCell().textContent = result.adjustableWaveform;
+        newRow.insertCell().textContent = result.adjustableFrequency;
+        newRow.insertCell().textContent = result.difference;
+        //newRow.insertCell().textContent = result.attemptCount; 
+        const attemptCountCell = newRow.insertCell();
+        attemptCountCell.textContent = result.attemptCount ? result.attemptCount : "-"; 
+        newRow.insertCell().textContent = result.score;
+      });
+    });
+    
+    // 점수 계산 함수
+    /*
+    function calculateScore(difference, referenceFrequency) {
+      const differencePercentage = (difference / referenceFrequency) * 100;
+      return Math.max(0, 100 - differencePercentage);
+    }*/
+    function calculateScore(referenceFrequency, adjustableFrequency) {
+        const logDiff = Math.abs(Math.log2(referenceFrequency) - Math.log2(adjustableFrequency));
+        // 로그 스케일 주파수 차이를 점수로 변환 (예: 최대 차이 0.5를 0점으로, 차이 0을 100점으로)
+        const score = Math.max(0, 100 - (logDiff / 0.5) * 100);
+        return score;
+    }
+
+    // 결과를 가져와서 정렬하고 테이블에 표시하는 함수 (추가)
+    const updateResultsTable = () => {
+      databaseRef.orderByChild('score').once('value')
+          .then((snapshot) => {
+              resultsTableBody.innerHTML = '';
+              let rank = 1;
+              const results = [];
+
+              snapshot.forEach((childSnapshot) => {
+                  const result = childSnapshot.val();
+                  // 로그 스케일 주파수 차이 계산
+                  //result.logDifference = Math.abs(Math.log2(result.referenceFrequency) - Math.log2(result.adjustableFrequency));
+                  // 로그 스케일 기반 점수 계산
+                  const logScaleScore = calculateScore(result.referenceFrequency, result.adjustableFrequency);
+  
+                  // 기존 점수와 로그 스케일 기반 점수가 다를 경우 업데이트
+                  if (result.score !== logScaleScore.toFixed(2)) {
+                      result.score = logScaleScore.toFixed(2);
+                      // Firebase 데이터 업데이트
+                      childSnapshot.ref.update({ score: result.score });
+                  }
+  
+                  results.push(result);
+              });
+  /*
+              snapshot.forEach((childSnapshot) => {
+                const result = childSnapshot.val();
+                // 로그 스케일 주파수 차이 계산
+                result.logDifference = Math.abs(Math.log2(result.referenceFrequency) - Math.log2(result.adjustableFrequency));
+                results.push(result);
+              });
+              */
+            
+  
+              // 정렬 부분 수정: 로그 스케일 주파수 차이로 오름차순 정렬
+              results.sort((a, b) => {
+                  // 시도 횟수가 숫자가 아니면 Number.MAX_SAFE_INTEGER를 사용
+                  const attemptCountA = typeof a.attemptCount === 'number' ? a.attemptCount : Number.MAX_SAFE_INTEGER;
+                  const attemptCountB = typeof b.attemptCount === 'number' ? b.attemptCount : Number.MAX_SAFE_INTEGER;
+              
+                  // 시도 횟수로 오름차순 정렬
+                  if (attemptCountA !== attemptCountB) {
+                      return attemptCountA - attemptCountB;
+                  }
+                  // 시도 횟수가 같으면 점수 기준으로 내림차순 정렬
+                  return b.score - a.score;
+              });
+    /*const updateResultsTable = () => {
+        databaseRef.orderByChild('score').once('value') // once를 쓰면 실시간 업데이트는 안되지만, orderbychild를 쓸수 있음
+            .then((snapshot) => {
+                resultsTableBody.innerHTML = ''; // 테이블 내용 초기화
+                let rank = 1;
+                const results = [];
+    
+                // 데이터를 배열에 저장
+                snapshot.forEach((childSnapshot) => {
+                    results.push(childSnapshot.val());
+                });
+    
+                // 점수 높은 순으로 정렬
+                results.sort((a, b) => {
+                    // 시도 횟수가 숫자가 아니면 Number.MAX_SAFE_INTEGER를 사용
+                    const attemptCountA = typeof a.attemptCount === 'number' ? a.attemptCount : Number.MAX_SAFE_INTEGER;
+                    const attemptCountB = typeof b.attemptCount === 'number' ? b.attemptCount : Number.MAX_SAFE_INTEGER;
+                
+                    // 시도 횟수로 오름차순 정렬
+                    if (attemptCountA !== attemptCountB) {
+                        return attemptCountA - attemptCountB;
+                    }
+                    // 시도 횟수가 같으면 점수로 내림차순 정렬
+                    return b.score - a.score;
+                });*/
+      
+                // 정렬된 결과 테이블에 추가
+                results.forEach((result) => {
+                    const newRow = resultsTableBody.insertRow();
+                    newRow.insertCell().textContent = rank++;
+                    newRow.insertCell().textContent = result.nickname;
+                    newRow.insertCell().textContent = result.referenceWaveform;
+                    newRow.insertCell().textContent = result.referenceFrequency;
+                    newRow.insertCell().textContent = result.adjustableWaveform;
+                    newRow.insertCell().textContent = result.adjustableFrequency;
+                    newRow.insertCell().textContent = result.difference;
+                    const attemptCountCell = newRow.insertCell();
+                    attemptCountCell.textContent = result.attemptCount ? result.attemptCount : "-";
+                    newRow.insertCell().textContent = result.score;
+                });
+            })
+            .catch((error) => {
+                console.error('결과 로드 오류:', error);
+            });
+    };
+
+    // 버튼 이벤트 리스너
+    newReferenceButton.addEventListener('click', generateNewReference);
+    referenceToggleButton.addEventListener('click', toggleReference);
+    adjustableToggleButton.addEventListener('click', toggleAdjustable);
+
+    // 주기적으로 결과 목록을 업데이트하는 함수
+    setInterval(updateResultsTable, 10000);
+    
+    // 페이지 로드 시 결과 목록 업데이트
+    updateResultsTable();
+    
+    // 페이지 로드 시 랜덤 기준음 생성
+    window.addEventListener('DOMContentLoaded', () => {
+      generateNewReference(); 
+    });
+
+    // 표 보이기/숨기기 버튼 이벤트 리스너
+    showTableButton.addEventListener('click', () => {
+      resultTable.hidden = !resultTable.hidden;
+    });
+  </script>
+</body>
+</html>
